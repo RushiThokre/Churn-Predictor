@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Churn Predictor
 
 <p align="center"><img src="app/assets/churn_shield_logo.png" width="120"/></p>
@@ -74,3 +75,6 @@ GitHub Actions runs on every push and pull request. It installs the requirements
 
 - The repository currently includes a synthetic starter dataset so the notebook can run end to end once Python is available.
 - The API expects a trained model artifact at `model/churn_model.pkl`.
+=======
+# Churn-Predictor
+>>>>>>> 054228af9523f6169550ed04aaa41ed601c46efd
