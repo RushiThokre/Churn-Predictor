@@ -90,7 +90,53 @@ def build_pipeline() -> Pipeline:
 
 
 if __name__ == "__main__":
-    pipeline = build_pipeline()
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(pipeline, MODEL_PATH)
-    print(f"Saved full pipeline to {MODEL_PATH}")
+    import mlflow
+    import mlflow.sklearn
+
+    mlflow.set_tracking_uri((ROOT / "mlruns").as_uri())
+    mlflow.set_experiment("telco-churn")
+
+    with mlflow.start_run(run_name="xgboost-baseline"):
+        pipeline = build_pipeline()
+        evaluation_frame = pd.read_csv(DATA_PATH).rename(
+            columns={
+                "Tenure in Months": "tenure",
+                "Monthly Charge": "MonthlyCharges",
+                "Total Charges": "TotalCharges",
+                "Payment Method": "PaymentMethod",
+                "Internet Service": "InternetService",
+                "Premium Tech Support": "TechSupport",
+                "Churn Label": "Churn",
+            }
+        )
+        evaluation_frame["Churn"] = evaluation_frame["Churn"].astype(str).str.strip().str.lower().map({"yes": 1, "no": 0}).astype(int)
+        evaluation_frame["tenure_bucket"] = pd.cut(
+            evaluation_frame["tenure"],
+            bins=[0, 12, 24, 48, 72],
+            labels=["0-1yr", "1-2yr", "2-4yr", "4-6yr"],
+        )
+        feature_columns = [
+            "tenure", "MonthlyCharges", "TotalCharges", "Contract", "PaymentMethod",
+            "InternetService", "TechSupport", "OnlineSecurity", "tenure_bucket",
+        ]
+        _, test_features, _, test_target = train_test_split(
+            evaluation_frame[feature_columns],
+            evaluation_frame["Churn"],
+            test_size=0.2,
+            stratify=evaluation_frame["Churn"],
+            random_state=42,
+        )
+        test_probabilities = pipeline.predict_proba(test_features)[:, 1]
+        test_predictions = pipeline.predict(test_features)
+        metrics = {
+            "roc_auc": roc_auc_score(test_target, test_probabilities),
+            "f1": f1_score(test_target, test_predictions),
+        }
+        mlflow.log_params({"model": "XGBClassifier", "random_state": 42, "test_size": 0.2})
+        mlflow.log_metrics(metrics)
+        mlflow.sklearn.log_model(pipeline, "model")
+
+        MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(pipeline, MODEL_PATH)
+        print(f"MLflow run: {mlflow.active_run().info.run_id}")
+        print(f"Saved full pipeline to {MODEL_PATH}")
