@@ -375,10 +375,54 @@ with monitoring_tab:
     monitoring = build_monitoring_summary(events)
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
-    metric_col1.metric("Logged predictions", monitoring["volume"])
-    metric_col2.metric("Average churn probability", f"{monitoring['average_probability']:.1%}")
     feedback_frame = load_feedback()
-    metric_col3.metric("Feedback responses", len(feedback_frame))
+    trend = monitoring.get("trend", pd.DataFrame(columns=["date", "prediction_volume", "average_probability"]))
+
+    volume_delta = None
+    risk_delta = None
+    if len(trend) > 1:
+        previous_day = trend.iloc[-2]
+        volume_delta = int(monitoring["volume"] - int(previous_day["prediction_volume"]))
+        risk_delta = float(monitoring["average_probability"] - float(previous_day["average_probability"]))
+
+    with metric_col1:
+        with st.container(border=True):
+            st.markdown(
+                '<div style="border-left: 4px solid #3b82f6; background: rgba(59, 130, 246, 0.07); border-radius: 0.75rem; padding: 0.25rem 0.75rem 0.5rem 0.75rem; margin: -0.25rem 0;">',
+                unsafe_allow_html=True,
+            )
+            st.metric("Logged predictions", monitoring["volume"], delta=(f"{volume_delta:+d}" if volume_delta is not None else None), delta_color="normal")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    with metric_col2:
+        with st.container(border=True):
+            st.markdown(
+                '<div style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.07); border-radius: 0.75rem; padding: 0.25rem 0.75rem 0.5rem 0.75rem; margin: -0.25rem 0;">',
+                unsafe_allow_html=True,
+            )
+            st.metric(
+                "Average churn probability",
+                f"{monitoring['average_probability']:.1%}",
+                delta=(f"{risk_delta:+.1%}" if risk_delta is not None else None),
+                delta_color="normal",
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    with metric_col3:
+        with st.container(border=True):
+            st.markdown(
+                '<div style="border-left: 4px solid #14b8a6; background: rgba(20, 184, 166, 0.07); border-radius: 0.75rem; padding: 0.25rem 0.75rem 0.5rem 0.75rem; margin: -0.25rem 0;">',
+                unsafe_allow_html=True,
+            )
+            feedback_delta = None
+            if "timestamp" in feedback_frame.columns and not feedback_frame.empty:
+                timestamps = pd.to_datetime(feedback_frame["timestamp"], errors="coerce").dropna()
+                if len(timestamps) > 1:
+                    day_counts = timestamps.dt.floor("D").value_counts().sort_index()
+                    if len(day_counts) > 1:
+                        feedback_delta = int(day_counts.iloc[-1] - day_counts.iloc[-2])
+            st.metric("Feedback responses", len(feedback_frame), delta=(f"{feedback_delta:+d}" if feedback_delta is not None else None), delta_color="normal")
+            st.markdown("</div>", unsafe_allow_html=True)
 
     if events.empty:
         st.info("No API prediction events are logged yet. Run a prediction request to populate this view.")
