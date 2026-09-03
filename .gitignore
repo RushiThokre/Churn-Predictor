@@ -4,3 +4,5 @@ __pycache__/
 mlruns/
 api/app.log
 api/request_log.jsonl
+api/feedback_log.jsonl
+data/*.db

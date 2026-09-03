@@ -7,13 +7,79 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy.stats import ks_2samp
+
+from app.database import read_feedback, read_prediction_events, read_prediction_inputs, persist_feedback
 
 
 MONITORING_LOG_PATH = Path(__file__).resolve().parent.parent / "api" / "request_log.jsonl"
 FEEDBACK_LOG_PATH = Path(__file__).resolve().parent.parent / "api" / "feedback_log.jsonl"
 
 
+def calculate_drift(reference: pd.Series, current: pd.Series, bins: int = 10) -> dict[str, float | str]:
+    """Calculate PSI, KS, and Jensen-Shannon drift scores for a numeric feature."""
+    reference = pd.to_numeric(reference, errors="coerce").dropna()
+    current = pd.to_numeric(current, errors="coerce").dropna()
+    if reference.empty or current.empty:
+        return {"psi": 0.0, "ks_statistic": 0.0, "ks_pvalue": 1.0, "js_divergence": 0.0, "status": "insufficient_data"}
+    edges = np.unique(np.quantile(reference, np.linspace(0, 1, bins + 1)))
+    if len(edges) < 2:
+        return {"psi": 0.0, "ks_statistic": 0.0, "ks_pvalue": 1.0, "js_divergence": 0.0, "status": "stable"}
+    expected = np.histogram(reference, bins=edges)[0] / len(reference)
+    actual = np.histogram(current, bins=edges)[0] / len(current)
+    expected = np.clip(expected, 1e-6, None)
+    actual = np.clip(actual, 1e-6, None)
+    expected = expected / expected.sum()
+    actual = actual / actual.sum()
+    psi = float(np.sum((actual - expected) * np.log(actual / expected)))
+    midpoint = (expected + actual) / 2
+    js_divergence = float(0.5 * np.sum(expected * np.log(expected / midpoint)) + 0.5 * np.sum(actual * np.log(actual / midpoint)))
+    ks_statistic, ks_pvalue = ks_2samp(reference, current)
+    status = "drift" if psi >= 0.25 or js_divergence >= 0.2 or ks_pvalue < 0.05 else "warning" if psi >= 0.1 or js_divergence >= 0.1 else "stable"
+    return {"psi": psi, "ks_statistic": float(ks_statistic), "ks_pvalue": float(ks_pvalue), "js_divergence": js_divergence, "status": status}
+
+
+def _categorical_drift(reference: pd.Series, current: pd.Series) -> dict[str, float | str]:
+    reference = reference.dropna().astype(str)
+    current = current.dropna().astype(str)
+    if reference.empty or current.empty:
+        return {"psi": 0.0, "ks_statistic": 0.0, "ks_pvalue": 1.0, "js_divergence": 0.0, "status": "insufficient_data"}
+    categories = sorted(set(reference) | set(current))
+    expected = reference.value_counts(normalize=True).reindex(categories, fill_value=0).to_numpy(dtype=float)
+    actual = current.value_counts(normalize=True).reindex(categories, fill_value=0).to_numpy(dtype=float)
+    expected = np.clip(expected, 1e-6, None)
+    actual = np.clip(actual, 1e-6, None)
+    expected = expected / expected.sum()
+    actual = actual / actual.sum()
+    psi = float(np.sum((actual - expected) * np.log(actual / expected)))
+    midpoint = (expected + actual) / 2
+    js_divergence = float(0.5 * np.sum(expected * np.log(expected / midpoint)) + 0.5 * np.sum(actual * np.log(actual / midpoint)))
+    status = "drift" if psi >= 0.25 or js_divergence >= 0.2 else "warning" if psi >= 0.1 or js_divergence >= 0.1 else "stable"
+    return {"psi": psi, "ks_statistic": 0.0, "ks_pvalue": 1.0, "js_divergence": js_divergence, "status": status}
+
+
+def build_feature_drift_report(reference: pd.DataFrame, current: pd.DataFrame, features: list[str]) -> pd.DataFrame:
+    """Compare reference and observed production feature distributions."""
+    rows = []
+    for feature in features:
+        if feature not in reference.columns or feature not in current.columns:
+            continue
+        if pd.api.types.is_numeric_dtype(reference[feature]):
+            scores = calculate_drift(reference[feature], current[feature])
+        else:
+            scores = _categorical_drift(reference[feature], current[feature])
+        rows.append({"feature": feature, **scores})
+    return pd.DataFrame(rows, columns=["feature", "psi", "ks_statistic", "ks_pvalue", "js_divergence", "status"])
+
+
 def load_prediction_events(log_path: Path = MONITORING_LOG_PATH) -> pd.DataFrame:
+    if log_path == MONITORING_LOG_PATH:
+        try:
+            database_events = read_prediction_events()
+            if not database_events.empty:
+                return database_events
+        except Exception:
+            pass
     columns = ["timestamp", "path", "prediction", "probability", "churn_label"]
     if not log_path.exists():
         return pd.DataFrame(columns=columns)
@@ -46,6 +112,28 @@ def load_prediction_events(log_path: Path = MONITORING_LOG_PATH) -> pd.DataFrame
     frame["probability"] = pd.to_numeric(frame["probability"], errors="coerce")
     frame["prediction"] = pd.to_numeric(frame["prediction"], errors="coerce")
     return frame.dropna(subset=["timestamp", "probability"])
+
+
+def load_prediction_inputs(log_path: Path = MONITORING_LOG_PATH) -> pd.DataFrame:
+    """Load raw customer inputs from API request logs for observed drift analysis."""
+    if log_path == MONITORING_LOG_PATH:
+        try:
+            database_inputs = read_prediction_inputs()
+            if not database_inputs.empty:
+                return database_inputs
+        except Exception:
+            pass
+    if not log_path.exists():
+        return pd.DataFrame()
+    rows: list[dict[str, Any]] = []
+    with log_path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                request = json.loads(line).get("request", {})
+                rows.extend(request if isinstance(request, list) else [request])
+            except (json.JSONDecodeError, TypeError):
+                continue
+    return pd.DataFrame(rows)
 
 
 def build_monitoring_summary(events: pd.DataFrame) -> dict[str, pd.DataFrame | float | int]:
@@ -89,6 +177,12 @@ def simulate_drift(model: Any, training_frame: pd.DataFrame, sample_size: int = 
 
 
 def write_feedback(prediction: int, probability: float, correct: bool, path: Path = FEEDBACK_LOG_PATH) -> None:
+    if path == FEEDBACK_LOG_PATH:
+        try:
+            persist_feedback(prediction, probability, correct)
+            return
+        except Exception:
+            pass
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -101,6 +195,13 @@ def write_feedback(prediction: int, probability: float, correct: bool, path: Pat
 
 
 def load_feedback(path: Path = FEEDBACK_LOG_PATH) -> pd.DataFrame:
+    if path == FEEDBACK_LOG_PATH:
+        try:
+            database_feedback = read_feedback()
+            if not database_feedback.empty:
+                return database_feedback
+        except Exception:
+            pass
     if not path.exists():
         return pd.DataFrame(columns=["timestamp", "prediction", "probability", "feedback"])
     records = []

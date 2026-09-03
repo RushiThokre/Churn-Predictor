@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -16,15 +17,20 @@ from app.explainability import (  # noqa: E402
     FEATURE_COLUMNS,
     explain_prediction,
     predict_batch,
+    shap_waterfall,
     summarize_batch_predictions,
 )
+from app.business_metrics import calculate_customer_value  # noqa: E402
 from app.monitoring import (  # noqa: E402
+    build_feature_drift_report,
     build_monitoring_summary,
     load_feedback,
+    load_prediction_inputs,
     load_prediction_events,
     simulate_drift,
     write_feedback,
 )
+from app.retention import recommend_retention_action  # noqa: E402
 
 MODEL_PATH = BASE_DIR / "model" / "churn_model.pkl"
 
@@ -112,6 +118,33 @@ def load_model():
 model = load_model()
 
 
+@st.cache_data
+def load_portfolio_predictions(_model) -> pd.DataFrame:
+    """Score the bundled customer portfolio once per model instance."""
+    source = pd.read_csv(BASE_DIR / "data" / "telco.csv")
+    scored = predict_batch(_model, source)
+    scored = scored.rename(columns={"Senior Citizen": "senior_citizen"})
+    scored["risk_level"] = np.select(
+        [scored["churn_probability"] >= 0.7, scored["churn_probability"] >= 0.4],
+        ["High", "Medium"],
+        default="Low",
+    )
+    recommendations = scored.apply(
+        lambda row: recommend_retention_action(float(row["churn_probability"]), row.to_dict()),
+        axis=1,
+        result_type="expand",
+    )
+    recommendations.columns = ["recommendation_reason", "recommended_action"]
+    scored = pd.concat([scored, recommendations], axis=1)
+    value_columns = scored.apply(
+        lambda row: calculate_customer_value(row.to_dict(), float(row["churn_probability"])),
+        axis=1,
+        result_type="expand",
+    )
+    scored = pd.concat([scored, value_columns], axis=1)
+    return scored
+
+
 def normalize_customer_input(row: dict) -> dict:
     contract_map = {
         "Month-to-month": "Month-to-Month",
@@ -164,7 +197,67 @@ with col2:
 with col3:
     st.info("🤖 ML Model Status: ✓ Ready")
 
-single_tab, batch_tab, monitoring_tab = st.tabs(["Single Prediction", "Batch Upload & Analytics", "Model Monitoring"])
+portfolio_tab, single_tab, batch_tab, monitoring_tab = st.tabs(["Portfolio Overview", "Single Prediction", "Batch Upload & Analytics", "Model Monitoring"])
+
+with portfolio_tab:
+    st.markdown("### Customer risk dashboard")
+    st.caption("Filter the scored portfolio to focus retention work on the customers and segments that matter most.")
+
+    try:
+        portfolio = load_portfolio_predictions(model)
+        with st.sidebar:
+            st.markdown("### Portfolio filters")
+            contract_filter = st.multiselect("Contract type", sorted(portfolio["Contract"].dropna().unique()), placeholder="All contracts")
+            tenure_filter = st.slider("Tenure (months)", 0, 72, (0, 72))
+            internet_filter = st.multiselect("Internet service", sorted(portfolio["InternetService"].dropna().unique()), placeholder="All services")
+            payment_filter = st.multiselect("Payment method", sorted(portfolio["PaymentMethod"].dropna().unique()), placeholder="All methods")
+            senior_filter = st.selectbox("Senior citizen", ["All", "Yes", "No"])
+            charge_min = float(portfolio["MonthlyCharges"].min())
+            charge_max = float(portfolio["MonthlyCharges"].max())
+            charge_filter = st.slider("Monthly charges", charge_min, charge_max, (charge_min, charge_max))
+            risk_filter = st.multiselect("Risk level", ["High", "Medium", "Low"], default=["High", "Medium", "Low"])
+
+        filtered = portfolio[
+            portfolio["tenure"].between(*tenure_filter)
+            & portfolio["MonthlyCharges"].between(*charge_filter)
+            & portfolio["risk_level"].isin(risk_filter)
+        ].copy()
+        if contract_filter:
+            filtered = filtered[filtered["Contract"].isin(contract_filter)]
+        if internet_filter:
+            filtered = filtered[filtered["InternetService"].isin(internet_filter)]
+        if payment_filter:
+            filtered = filtered[filtered["PaymentMethod"].isin(payment_filter)]
+        if senior_filter != "All":
+            filtered = filtered[filtered["senior_citizen"].astype(str) == senior_filter]
+
+        high_risk = int((filtered["risk_level"] == "High").sum())
+        revenue_at_risk = float(filtered["revenue_at_risk"].sum())
+        average_probability = float(filtered["churn_probability"].mean()) if not filtered.empty else 0.0
+        metric_1, metric_2, metric_3, metric_4 = st.columns(4)
+        metric_1.metric("Customers", f"{len(filtered):,}")
+        metric_2.metric("High risk", f"{high_risk:,}")
+        metric_3.metric("Revenue at risk", f"${revenue_at_risk:,.0f}")
+        metric_4.metric("Average churn probability", f"{average_probability:.1%}")
+
+        chart_col, table_col = st.columns([0.9, 1.6])
+        with chart_col:
+            st.markdown("### Churn risk distribution")
+            distribution = filtered["risk_level"].value_counts().reindex(["High", "Medium", "Low"], fill_value=0).rename_axis("risk_level").reset_index(name="customers")
+            risk_chart = px.bar(distribution, x="risk_level", y="customers", color="risk_level", color_discrete_map={"High": "#dc2626", "Medium": "#f59e0b", "Low": "#16a34a"})
+            risk_chart.update_layout(showlegend=False, height=330, margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(risk_chart, use_container_width=True)
+
+        with table_col:
+            st.markdown("### Top risk customers")
+            top_risk = filtered.sort_values(["churn_probability", "revenue_at_risk"], ascending=False).head(10)
+            top_risk = top_risk[["customer_id", "risk_level", "churn_probability", "MonthlyCharges", "revenue_at_risk", "Contract", "recommended_action"]].rename(columns={"customer_id": "Customer", "risk_level": "Risk", "churn_probability": "Churn probability", "MonthlyCharges": "Monthly revenue", "revenue_at_risk": "Revenue at risk", "recommended_action": "Recommended action"})
+            top_risk["Churn probability"] = top_risk["Churn probability"].map(lambda value: f"{value:.1%}")
+            top_risk["Monthly revenue"] = top_risk["Monthly revenue"].map(lambda value: f"${value:,.0f}")
+            top_risk["Revenue at risk"] = top_risk["Revenue at risk"].map(lambda value: f"${value:,.0f}")
+            st.dataframe(top_risk, use_container_width=True, hide_index=True)
+    except Exception as exc:
+        st.error(f"Unable to score the portfolio: {exc}")
 
 with single_tab:
     st.markdown('<div class="input-section">', unsafe_allow_html=True)
@@ -219,7 +312,8 @@ with single_tab:
 
         probability = float(model.predict_proba(input_df)[0][1])
         explanation = explain_prediction(model, input_df).head(5)
-        st.session_state["latest_prediction"] = {"prediction": int(probability >= 0.5), "probability": probability}
+        threshold = float(getattr(model, "decision_threshold", 0.5))
+        st.session_state["latest_prediction"] = {"prediction": int(probability >= threshold), "probability": probability}
 
         st.markdown("### 📊 Prediction Results")
 
@@ -236,7 +330,7 @@ with single_tab:
             )
 
         with col2:
-            if probability > 0.5:
+            if probability >= threshold:
                 st.markdown(
                     """
                     <div class="status-risk">
@@ -260,11 +354,55 @@ with single_tab:
         st.markdown("### Risk Assessment")
         risk_level = "🔴 Very High" if probability > 0.8 else "🟠 High" if probability > 0.6 else "🟡 Medium" if probability > 0.4 else "🟢 Low"
         st.progress(float(probability), text=f"Risk Level: {risk_level}")
+        recommendation = recommend_retention_action(probability, input_df.iloc[0].to_dict())
+        st.info(f"**Recommended action:** {recommendation['recommended_action']}  \n_{recommendation['reason']}_")
+        customer_value = calculate_customer_value(input_df.iloc[0].to_dict(), probability)
+        value_col1, value_col2, value_col3 = st.columns(3)
+        value_col1.metric("Expected remaining life", f"{customer_value['expected_remaining_months']:.0f} months")
+        value_col2.metric("Potential revenue", f"${customer_value['potential_revenue']:,.0f}")
+        value_col3.metric("Revenue at risk", f"${customer_value['revenue_at_risk']:,.0f}")
+
+        st.markdown("### What-if retention simulation")
+        st.caption("Change a few controllable customer conditions to estimate how a retention offer could affect churn risk.")
+        with st.form("what_if_form", border=False):
+            simulation_col1, simulation_col2, simulation_col3 = st.columns(3)
+            with simulation_col1:
+                simulated_contract = st.selectbox("Simulated contract", ["Month-to-month", "One year", "Two year"], index=["Month-to-month", "One year", "Two year"].index(contract), key="simulated_contract")
+            with simulation_col2:
+                simulated_monthly_charges = st.number_input("Simulated monthly charges ($)", min_value=0.0, value=float(monthly_charges), step=0.5, key="simulated_monthly_charges")
+            with simulation_col3:
+                simulated_tenure = st.number_input("Simulated tenure (months)", min_value=0, max_value=72, value=int(tenure), key="simulated_tenure")
+            simulated_tech_support = st.checkbox("Add tech support", value=tech_support == "Yes", key="simulated_tech_support")
+            simulation_submitted = st.form_submit_button("Run simulation", use_container_width=True)
+
+        if simulation_submitted:
+            simulated_input = input_df.copy()
+            simulated_input["Contract"] = normalize_customer_input({"Contract": simulated_contract})["Contract"]
+            simulated_input["MonthlyCharges"] = simulated_monthly_charges
+            simulated_input["tenure"] = simulated_tenure
+            simulated_input["TechSupport"] = "Yes" if simulated_tech_support else "No"
+            simulated_input["tenure_bucket"] = pd.cut(
+                simulated_input["tenure"],
+                bins=[0, 12, 24, 48, 72],
+                labels=["0-1yr", "1-2yr", "2-4yr", "4-6yr"],
+            )
+            simulated_probability = float(model.predict_proba(simulated_input)[0][1])
+            change_points = (probability - simulated_probability) * 100
+            result_col1, result_col2, result_col3 = st.columns(3)
+            result_col1.metric("Current probability", f"{probability:.1%}")
+            result_col2.metric("Simulated probability", f"{simulated_probability:.1%}")
+            result_col3.metric(
+                "Potential churn reduction" if change_points >= 0 else "Potential churn increase",
+                f"{abs(change_points):.1f} percentage points",
+                delta=f"{change_points:+.1f} pp",
+                delta_color="normal" if change_points >= 0 else "inverse",
+            )
 
         explanation_col, chart_col = st.columns([1.15, 1])
 
         with explanation_col:
             st.markdown("### 🔍 Why this prediction?")
+            st.caption("Positive values increase churn risk; percentages show each driver's share of total absolute SHAP impact.")
             if explanation.empty:
                 st.info("No explanation data was generated for this prediction.")
             else:
@@ -289,6 +427,12 @@ with single_tab:
                 )
                 fig.update_layout(showlegend=False, height=300, margin=dict(l=10, r=10, t=30, b=10))
                 st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("### SHAP waterfall")
+        waterfall = shap_waterfall(model, input_df, max_display=8)
+        if waterfall is not None:
+            st.pyplot(waterfall, use_container_width=True)
+            st.caption("The baseline is the model's average output. Red features push the prediction toward churn; blue features push it away.")
 
         with st.expander("📈 Customer Insights", expanded=True):
             col1, col2, col3, col4 = st.columns(4)
@@ -359,7 +503,7 @@ with batch_tab:
                 st.plotly_chart(segment_chart, use_container_width=True)
 
             st.markdown("### Batch predictions")
-            display_df = predictions[["customer_id", "Contract", "InternetService", "TechSupport", "OnlineSecurity", "churn_probability", "churn_label"]].copy()
+            display_df = predictions[["customer_id", "Contract", "InternetService", "TechSupport", "OnlineSecurity", "churn_probability", "churn_label", "potential_revenue", "revenue_at_risk", "recommended_action"]].copy()
             display_df["churn_probability"] = display_df["churn_probability"].round(3)
             st.dataframe(display_df.sort_values("churn_probability", ascending=False), use_container_width=True, hide_index=True)
         except Exception as exc:
@@ -380,10 +524,15 @@ with monitoring_tab:
 
     volume_delta = None
     risk_delta = None
-    if len(trend) > 1:
-        previous_day = trend.iloc[-2]
-        volume_delta = int(monitoring["volume"] - int(previous_day["prediction_volume"]))
-        risk_delta = float(monitoring["average_probability"] - float(previous_day["average_probability"]))
+    latest_trend_day = trend.iloc[-1] if len(trend) else None
+    previous_trend_day = trend.iloc[-2] if len(trend) > 1 else None
+    if latest_trend_day is not None:
+        volume_delta = int(latest_trend_day["prediction_volume"])
+    if latest_trend_day is not None and len(events) > 0:
+        latest_date = pd.Timestamp(latest_trend_day["date"]).date()
+        prior_events = events[events["timestamp"].dt.date < latest_date]
+        if not prior_events.empty:
+            risk_delta = float(monitoring["average_probability"] - prior_events["probability"].mean())
 
     with metric_col1:
         with st.container(border=True):
@@ -416,8 +565,8 @@ with monitoring_tab:
             )
             feedback_delta = None
             if "timestamp" in feedback_frame.columns and not feedback_frame.empty:
-                timestamps = pd.to_datetime(feedback_frame["timestamp"], errors="coerce").dropna()
-                if len(timestamps) > 1:
+                timestamps = pd.to_datetime(feedback_frame["timestamp"], errors="coerce", utc=True).dropna()
+                if not timestamps.empty:
                     day_counts = timestamps.dt.floor("D").value_counts().sort_index()
                     if len(day_counts) > 1:
                         feedback_delta = int(day_counts.iloc[-1] - day_counts.iloc[-2])
@@ -448,6 +597,45 @@ with monitoring_tab:
         )
         confidence_chart.update_layout(height=330, showlegend=False, margin=dict(l=10, r=10, t=45, b=10))
         st.plotly_chart(confidence_chart, use_container_width=True)
+
+    st.markdown("### Drift simulation")
+    st.markdown("### Feature drift")
+    st.caption("Observed API inputs are compared with the training population using PSI, KS, and Jensen-Shannon divergence.")
+    observed_inputs = load_prediction_inputs()
+    if observed_inputs.empty:
+        st.info("No observed API feature inputs are available yet. Make a prediction request to populate this report.")
+    else:
+        reference_inputs = pd.read_csv(BASE_DIR / "data" / "telco.csv").rename(
+            columns={
+                "Tenure in Months": "tenure",
+                "Monthly Charge": "MonthlyCharges",
+                "Total Charges": "TotalCharges",
+                "Payment Method": "PaymentMethod",
+                "Internet Service": "InternetService",
+                "Premium Tech Support": "TechSupport",
+                "Online Security": "OnlineSecurity",
+            }
+        )
+        drift_report = build_feature_drift_report(
+            reference_inputs,
+            observed_inputs,
+            ["tenure", "MonthlyCharges", "TotalCharges", "Contract", "PaymentMethod", "InternetService", "TechSupport", "OnlineSecurity"],
+        )
+        if drift_report.empty:
+            st.warning("Observed requests do not contain enough comparable feature columns for drift analysis.")
+        else:
+            display_report = drift_report.copy()
+            display_report["psi"] = display_report["psi"].map(lambda value: f"{value:.3f}")
+            display_report["ks_statistic"] = display_report["ks_statistic"].map(lambda value: f"{value:.3f}")
+            display_report["js_divergence"] = display_report["js_divergence"].map(lambda value: f"{value:.3f}")
+            st.dataframe(display_report, use_container_width=True, hide_index=True)
+            drifted_features = drift_report.loc[drift_report["status"] == "drift", "feature"].tolist()
+            if drifted_features:
+                st.error(f"Model retraining recommended. Significant drift detected in: {', '.join(drifted_features)}.")
+            elif (drift_report["status"] == "warning").any():
+                st.warning("Monitor feature drift closely; one or more features are in the warning range.")
+            else:
+                st.success("No significant feature drift detected in observed API inputs.")
 
     st.markdown("### Drift simulation")
     st.caption("Synthetic new data intentionally shifts tenure, pricing, and contract mix. This is a monitoring demo, not ground-truth performance measurement.")

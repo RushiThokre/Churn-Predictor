@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from app.monitoring import build_monitoring_summary, load_feedback, load_prediction_events, simulate_drift, write_feedback
+from app.monitoring import build_feature_drift_report, build_monitoring_summary, calculate_drift, load_feedback, load_prediction_events, simulate_drift, write_feedback
 from model.train_pipeline import build_pipeline
 
 
@@ -45,3 +45,20 @@ def test_feedback_and_drift_outputs(tmp_path):
     drift = simulate_drift(model, source, sample_size=5)
     assert len(drift) == 5
     assert {"probability", "cohort"}.issubset(drift.columns)
+
+
+def test_feature_drift_report_includes_psi_ks_and_js():
+    reference = pd.DataFrame({"MonthlyCharges": [40, 45, 50, 55], "Contract": ["One Year"] * 4})
+    current = pd.DataFrame({"MonthlyCharges": [140, 145, 150, 155], "Contract": ["Month-to-Month"] * 4})
+
+    report = build_feature_drift_report(reference, current, ["MonthlyCharges", "Contract"])
+
+    assert set(report["feature"]) == {"MonthlyCharges", "Contract"}
+    assert {"psi", "ks_statistic", "ks_pvalue", "js_divergence", "status"}.issubset(report.columns)
+    assert (report["status"] == "drift").any()
+
+
+def test_numeric_drift_is_stable_for_matching_distributions():
+    scores = calculate_drift(pd.Series(range(100)), pd.Series(range(100)))
+    assert scores["status"] == "stable"
+    assert scores["js_divergence"] == 0

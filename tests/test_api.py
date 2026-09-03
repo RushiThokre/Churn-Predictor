@@ -67,5 +67,19 @@ def test_predict_batch_returns_all_predictions():
     assert response.status_code == 200
     payload = response.json()
     assert len(payload) == 2
+    assert payload[0]["customer_id"] == "CUST-1"
+    assert {"churn_probability", "risk_level", "revenue_at_risk", "recommended_action"}.issubset(payload[0])
     assert payload[0]["churn_label"] in {"churn", "stay"}
     assert payload[0]["probability"] >= 0
+
+
+def test_metrics_and_model_info_endpoints():
+    client = TestClient(api.app)
+
+    metrics_response = client.get("/metrics")
+    info_response = client.get("/model-info")
+
+    assert metrics_response.status_code == 200
+    assert metrics_response.json()["model_ready"] is True
+    assert info_response.status_code == 200
+    assert info_response.json()["model"] == "DummyModel"

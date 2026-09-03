@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import shap
+import matplotlib.pyplot as plt
 
 FEATURE_COLUMNS = [
     "tenure",
@@ -109,7 +110,8 @@ def predict_batch(model, raw_df: pd.DataFrame) -> pd.DataFrame:
 
     predictions = df.copy()
     predictions["churn_probability"] = probabilities
-    predictions["churn_label"] = predictions["churn_probability"].apply(lambda prob: "churn" if prob >= 0.5 else "stay")
+    threshold = float(getattr(model, "decision_threshold", 0.5))
+    predictions["churn_label"] = predictions["churn_probability"].apply(lambda prob: "churn" if prob >= threshold else "stay")
     return predictions
 
 
@@ -168,20 +170,24 @@ def _decode_encoded_feature(feature_name: str) -> str:
     return cleaned.replace("_", " ")
 
 
-def explain_prediction(model, raw_df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
-    """Return the top positive churn drivers for a prediction using SHAP."""
+def _build_shap_explanation(model, raw_df: pd.DataFrame) -> shap.Explanation | None:
     if not hasattr(model, "named_steps"):
-        return pd.DataFrame(columns=["feature", "label", "contribution", "share_pct"])
+        return None
 
     preprocessor = model.named_steps.get("preprocessor")
+    selector = model.named_steps.get("selector")
     classifier = model.named_steps.get("classifier")
     if preprocessor is None or classifier is None:
-        return pd.DataFrame(columns=["feature", "label", "contribution", "share_pct"])
+        return None
 
     input_df = _prepare_input_features(raw_df)
     transformed = preprocessor.transform(input_df)
     if hasattr(transformed, "toarray"):
         transformed = transformed.toarray()
+    feature_names = np.asarray(preprocessor.get_feature_names_out())
+    if selector is not None:
+        transformed = selector.transform(transformed)
+        feature_names = feature_names[selector.get_support()]
 
     explainer = shap.TreeExplainer(classifier)
     shap_values = explainer.shap_values(transformed)
@@ -199,13 +205,28 @@ def explain_prediction(model, raw_df: pd.DataFrame, top_n: int = 5) -> pd.DataFr
     elif values.ndim != 1:
         values = values.reshape(-1)
 
-    feature_names = np.asarray(preprocessor.get_feature_names_out())
     if len(values) < len(feature_names):
         values = np.pad(values, (0, len(feature_names) - len(values)), constant_values=0)
 
+    expected_value = np.asarray(explainer.expected_value)
+    base_value = float(expected_value[1] if expected_value.ndim else expected_value)
+    return shap.Explanation(
+        values=values[:len(feature_names)],
+        base_values=base_value,
+        data=transformed[0],
+        feature_names=[_decode_encoded_feature(name) for name in feature_names],
+    )
+
+
+def explain_prediction(model, raw_df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
+    """Return the top signed churn drivers for a prediction using SHAP."""
+    explanation = _build_shap_explanation(model, raw_df)
+    if explanation is None:
+        return pd.DataFrame(columns=["feature", "label", "contribution", "share_pct"])
+
     contribution_df = pd.DataFrame({
-        "feature": feature_names,
-        "contribution": values[: len(feature_names)],
+        "feature": explanation.feature_names,
+        "contribution": explanation.values,
     })
     contribution_df["label"] = contribution_df["feature"].map(_decode_encoded_feature)
 
@@ -221,3 +242,13 @@ def explain_prediction(model, raw_df: pd.DataFrame, top_n: int = 5) -> pd.DataFr
     positive = positive.sort_values("contribution", ascending=False).reset_index(drop=True)
 
     return positive.head(top_n)[["feature", "label", "contribution", "share_pct"]].copy()
+
+
+def shap_waterfall(model, raw_df: pd.DataFrame, max_display: int = 8):
+    """Return a matplotlib SHAP waterfall figure for the first input row."""
+    explanation = _build_shap_explanation(model, raw_df)
+    if explanation is None:
+        return None
+    plt.close("all")
+    shap.plots.waterfall(explanation, max_display=max_display, show=False)
+    return plt.gcf()

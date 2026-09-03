@@ -1,6 +1,6 @@
 import pandas as pd
 
-from app.explainability import explain_prediction
+from app.explainability import explain_prediction, shap_waterfall
 from model.train_pipeline import build_pipeline
 
 
@@ -26,3 +26,21 @@ def test_explain_prediction_returns_top_risk_drivers():
     assert explanation["share_pct"].sum() > 0
     assert explanation["feature"].nunique() >= 1
     assert explanation["contribution"].gt(0).any()
+
+
+def test_shap_waterfall_returns_figure():
+    model = build_pipeline()
+    sample = pd.DataFrame([{
+        "tenure": 5,
+        "MonthlyCharges": 80,
+        "TotalCharges": 350,
+        "Contract": "Month-to-month",
+        "PaymentMethod": "Electronic check",
+        "InternetService": "Fiber optic",
+        "TechSupport": "No",
+        "OnlineSecurity": "No",
+    }])
+
+    figure = shap_waterfall(model, sample)
+
+    assert figure is not None
