@@ -65,6 +65,13 @@ st.markdown(
         font-size: 1rem;
         margin-top: 0.45rem;
     }
+    .brand-tagline {
+        color: #6366F1;
+        font-size: 0.76rem;
+        font-weight: 750;
+        letter-spacing: 0.06em;
+        margin-top: 0.35rem;
+    }
     .model-status {
         border-left: 3px solid #22c55e;
         color: #166534;
@@ -88,19 +95,11 @@ st.markdown(
         margin: 0.25rem 0 0.8rem;
         text-transform: uppercase;
     }
-    .metric-card {
-        background: #6366F1;
-        color: white;
-        padding: 2rem;
-        border-radius: 15px;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
     [data-testid="stMetric"] {
         background: #ffffff;
         border: 1px solid #dbe4ee;
-        border-radius: 14px;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
         min-height: 108px;
         padding: 1rem 1.1rem 0.85rem;
     }
@@ -119,16 +118,9 @@ st.markdown(
         margin-top: 0.45rem;
     }
     .metric-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin: 1rem 0;
-    }
-    .metric-label {
-        font-size: 1rem;
-        opacity: 0.9;
     }
     .assessment-card {
-        border-radius: 16px;
+        border-radius: 8px;
         color: white;
         padding: 1.6rem 1.8rem;
         text-align: center;
@@ -148,7 +140,7 @@ st.markdown(
         letter-spacing: 0.12em;
     }
     .assessment-probability {
-        font-size: 3.2rem;
+        font-size: 2.8rem;
         font-weight: 800;
         line-height: 1.1;
         margin: 0.8rem 0 0.25rem;
@@ -166,7 +158,7 @@ st.markdown(
     .recommendation-card {
         background: #eef2ff;
         border-left: 4px solid #6366F1;
-        border-radius: 12px;
+        border-radius: 8px;
         color: #172554;
         padding: 1rem 1.2rem;
     }
@@ -204,7 +196,7 @@ st.markdown(
     .health-item {
         background: #ffffff;
         border: 1px solid #dbe4ee;
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 0.7rem 0.8rem;
     }
     .health-name {
@@ -231,30 +223,10 @@ st.markdown(
     .kpi-row-spacer {
         height: 0.75rem;
     }
-    .status-safe {
-        background: #22C55E;
-        color: white;
-        padding: 1.5rem;
-        border-radius: 15px;
-        text-align: center;
-        font-size: 1.5rem;
-        font-weight: 600;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    .status-risk {
-        background: #EF4444;
-        color: white;
-        padding: 1.5rem;
-        border-radius: 15px;
-        text-align: center;
-        font-size: 1.5rem;
-        font-weight: 600;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
     .input-section {
         background: #f8f9fa;
         padding: 2rem;
-        border-radius: 15px;
+        border-radius: 8px;
         margin-bottom: 2rem;
         border-left: 5px solid #6366F1;
     }
@@ -345,6 +317,7 @@ with col1:
         <div class="brand">
             <div class="brand-title">🛡️ ChurnShield</div>
             <div class="brand-subtitle">Customer Churn Intelligence Platform</div>
+            <div class="brand-tagline">Predict • Explain • Retain</div>
         </div>
         """,
         unsafe_allow_html=True,
