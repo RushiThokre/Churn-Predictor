@@ -187,6 +187,47 @@ st.markdown(
         font-size: 0.86rem;
         margin-top: 0.25rem;
     }
+    .monitoring-section-title {
+        color: #172554;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        margin: 1.2rem 0 0.7rem;
+        text-transform: uppercase;
+    }
+    .health-grid {
+        display: grid;
+        gap: 0.6rem;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        margin-bottom: 1rem;
+    }
+    .health-item {
+        background: #ffffff;
+        border: 1px solid #dbe4ee;
+        border-radius: 10px;
+        padding: 0.7rem 0.8rem;
+    }
+    .health-name {
+        color: #64748b;
+        font-size: 0.68rem;
+        font-weight: 750;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .health-status {
+        color: #166534;
+        font-size: 0.78rem;
+        font-weight: 800;
+        margin-top: 0.35rem;
+    }
+    .health-status.warning {
+        color: #B45309;
+    }
+    @media (max-width: 900px) {
+        .health-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
     .kpi-row-spacer {
         height: 0.75rem;
     }
@@ -709,6 +750,27 @@ with monitoring_tab:
     events = load_prediction_events()
     monitoring = build_monitoring_summary(events)
 
+    data_path = BASE_DIR / "data" / "telco.csv"
+    data_healthy = data_path.exists() and data_path.stat().st_size > 0
+    model_healthy = MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 0 and model is not None
+    prediction_status = "NORMAL" if events.empty or monitoring["average_probability"] <= 0.7 else "WATCH"
+    observed_for_health = load_prediction_inputs()
+    feature_status = "WARNING" if observed_for_health.empty else "MONITORING"
+    feature_status_class = "warning" if observed_for_health.empty else ""
+    st.markdown('<div class="monitoring-section-title">Model health</div>', unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="health-grid">
+            <div class="health-item"><div class="health-name">API</div><div class="health-status">● ONLINE</div></div>
+            <div class="health-item"><div class="health-name">Model</div><div class="health-status">● {'HEALTHY' if model_healthy else 'UNAVAILABLE'}</div></div>
+            <div class="health-item"><div class="health-name">Data quality</div><div class="health-status">● {'HEALTHY' if data_healthy else 'CHECK'}</div></div>
+            <div class="health-item"><div class="health-name">Feature drift</div><div class="health-status {feature_status_class}">{'●' if observed_for_health.empty else '●'} {feature_status}</div></div>
+            <div class="health-item"><div class="health-name">Prediction drift</div><div class="health-status">● {prediction_status}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     feedback_frame = load_feedback()
     trend = monitoring.get("trend", pd.DataFrame(columns=["date", "prediction_volume", "average_probability"]))
@@ -763,6 +825,23 @@ with monitoring_tab:
                         feedback_delta = int(day_counts.iloc[-1] - day_counts.iloc[-2])
             st.metric("Feedback responses", len(feedback_frame), delta=(f"{feedback_delta:+d}" if feedback_delta is not None else None), delta_color="normal")
             st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="monitoring-section-title">Model performance</div>', unsafe_allow_html=True)
+    comparison_path = BASE_DIR / "model" / "model_comparison.csv"
+    if comparison_path.exists():
+        performance = pd.read_csv(comparison_path).sort_values("roc_auc", ascending=False)
+        performance_chart = px.bar(
+            performance,
+            x="model",
+            y="roc_auc",
+            color="roc_auc",
+            text="roc_auc",
+            color_continuous_scale=[[0, "#C7D2FE"], [1, "#6366F1"]],
+            title="ROC-AUC benchmark by candidate model",
+        )
+        performance_chart.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+        performance_chart.update_layout(showlegend=False, coloraxis_showscale=False, height=300, margin=dict(l=10, r=10, t=45, b=10), yaxis_title="ROC-AUC", xaxis_title=None, yaxis_range=[0.75, 1])
+        st.plotly_chart(performance_chart, use_container_width=True)
 
     if events.empty:
         st.info("No API prediction events are logged yet. Run a prediction request to populate this view.")
