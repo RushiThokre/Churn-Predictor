@@ -58,7 +58,7 @@ st.markdown(
         padding: 0.25rem 0 1.25rem;
     }
     .brand-title {
-        color: #172554;
+        color: #F8FAFC;
         font-size: 2rem;
         font-weight: 750;
         line-height: 1.1;
