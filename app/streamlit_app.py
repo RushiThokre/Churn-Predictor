@@ -45,19 +45,38 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 1rem;
+    .block-container {
+        padding-top: 2rem;
     }
-    .subtitle {
-        font-size: 1.3rem;
-        color: #666;
-        margin-bottom: 2rem;
+    .brand {
+        padding: 0.25rem 0 1.25rem;
+    }
+    .brand-title {
+        color: #172554;
+        font-size: 2rem;
+        font-weight: 750;
+        line-height: 1.1;
+        letter-spacing: 0.01em;
+    }
+    .brand-subtitle {
+        color: #64748b;
+        font-size: 1rem;
+        margin-top: 0.45rem;
+    }
+    .model-status {
+        border-left: 3px solid #22c55e;
+        color: #166534;
+        font-size: 0.82rem;
+        font-weight: 750;
+        line-height: 1.55;
+        margin-top: 0.35rem;
+        padding: 0.35rem 0 0.35rem 0.85rem;
+        text-align: left;
+    }
+    .model-status small {
+        color: #64748b;
+        font-size: 0.76rem;
+        font-weight: 500;
     }
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -182,21 +201,29 @@ def normalize_customer_input(row: dict) -> dict:
 
 
 # Header
-col1, col2, col3 = st.columns([1, 3, 1])
+col1, col2 = st.columns([4, 1])
 
 with col1:
-    logo_path = Path(__file__).parent / "assets" / "churn_shield_logo.png"
-    if logo_path.exists():
-        st.image(str(logo_path), width=100)
-    else:
-        st.markdown("🎯")
+    st.markdown(
+        """
+        <div class="brand">
+            <div class="brand-title">🛡️ ChurnShield</div>
+            <div class="brand-subtitle">Customer Churn Intelligence Platform</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with col2:
-    st.markdown('<div class="main-header">📊 Customer Churn Predictor</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Predict churn risk and monitor portfolio health</div>', unsafe_allow_html=True)
-
-with col3:
-    st.info("🤖 ML Model Status: ✓ Ready")
+    st.markdown(
+        """
+        <div class="model-status">
+            ● SYSTEM ONLINE<br>
+            <small>XGBoost v1.4</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 portfolio_tab, single_tab, batch_tab, monitoring_tab = st.tabs(["Portfolio Overview", "Single Prediction", "Batch Upload & Analytics", "Model Monitoring"])
 
