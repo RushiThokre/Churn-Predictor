@@ -118,6 +118,9 @@ st.markdown(
         font-size: 1rem;
         opacity: 0.9;
     }
+    .kpi-row-spacer {
+        height: 0.75rem;
+    }
     .status-safe {
         background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
         color: white;
@@ -283,13 +286,22 @@ with portfolio_tab:
             filtered = filtered[filtered["senior_citizen"].astype(str) == senior_filter]
 
         high_risk = int((filtered["risk_level"] == "High").sum())
+        medium_risk = int((filtered["risk_level"] == "Medium").sum())
+        low_risk = int((filtered["risk_level"] == "Low").sum())
         revenue_at_risk = float(filtered["revenue_at_risk"].sum())
         average_probability = float(filtered["churn_probability"].mean()) if not filtered.empty else 0.0
+        average_monthly_revenue = float(filtered["MonthlyCharges"].mean()) if not filtered.empty else 0.0
         metric_1, metric_2, metric_3, metric_4 = st.columns(4)
         metric_1.metric("👥 Customers", f"{len(filtered):,}")
         metric_2.metric("🔴 High Risk", f"{high_risk:,}")
         metric_3.metric("💰 Revenue at Risk", f"${revenue_at_risk / 1_000_000:.2f}M")
         metric_4.metric("📉 Avg Churn Probability", f"{average_probability:.1%}")
+
+        st.markdown('<div class="kpi-row-spacer"></div>', unsafe_allow_html=True)
+        secondary_1, secondary_2, secondary_3 = st.columns(3)
+        secondary_1.metric("🟢 Low Risk", f"{low_risk:,}")
+        secondary_2.metric("🟠 Medium Risk", f"{medium_risk:,}")
+        secondary_3.metric("💳 Avg Monthly Revenue", f"${average_monthly_revenue:,.2f}")
 
         chart_col, table_col = st.columns([0.9, 1.6])
         with chart_col:
