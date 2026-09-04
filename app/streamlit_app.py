@@ -127,6 +127,66 @@ st.markdown(
         font-size: 1rem;
         opacity: 0.9;
     }
+    .assessment-card {
+        border-radius: 16px;
+        color: white;
+        padding: 1.6rem 1.8rem;
+        text-align: center;
+    }
+    .assessment-card.high {
+        background: #EF4444;
+    }
+    .assessment-card.medium {
+        background: #F59E0B;
+    }
+    .assessment-card.low {
+        background: #22C55E;
+    }
+    .assessment-label {
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+    }
+    .assessment-probability {
+        font-size: 3.2rem;
+        font-weight: 800;
+        line-height: 1.1;
+        margin: 0.8rem 0 0.25rem;
+    }
+    .assessment-caption {
+        font-size: 0.92rem;
+        opacity: 0.9;
+    }
+    .assessment-revenue {
+        border-top: 1px solid rgba(255, 255, 255, 0.35);
+        font-size: 1rem;
+        margin-top: 1.2rem;
+        padding-top: 0.9rem;
+    }
+    .recommendation-card {
+        background: #eef2ff;
+        border-left: 4px solid #6366F1;
+        border-radius: 12px;
+        color: #172554;
+        padding: 1rem 1.2rem;
+    }
+    .recommendation-title {
+        color: #4338CA;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+    .recommendation-action {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-top: 0.35rem;
+    }
+    .recommendation-reason {
+        color: #475569;
+        font-size: 0.86rem;
+        margin-top: 0.25rem;
+    }
     .kpi-row-spacer {
         height: 0.75rem;
     }
@@ -361,8 +421,10 @@ with portfolio_tab:
         st.error(f"Unable to score the portfolio: {exc}")
 
 with single_tab:
+    st.markdown("## Customer Risk Assessment")
+    st.caption("Enter an active customer's current profile to estimate churn risk, time-to-churn, and the next best retention action.")
     st.markdown('<div class="input-section">', unsafe_allow_html=True)
-    st.markdown("### 📝 Customer Information")
+    st.markdown("### Customer information")
 
     with st.form("churn_form", border=False):
         col1, col2, col3 = st.columns(3)
@@ -384,7 +446,7 @@ with single_tab:
 
         col1, col2, col3 = st.columns([1, 1, 2])
         with col3:
-            submitted = st.form_submit_button("🚀 Predict Churn Risk", use_container_width=True)
+            submitted = st.form_submit_button("🎯 Predict Risk", use_container_width=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -416,9 +478,11 @@ with single_tab:
         survival_metrics = estimate_survival_metrics(probability)
         explanation = explain_prediction(model, input_df).head(5)
         threshold = float(getattr(model, "decision_threshold", 0.5))
+        recommendation = recommend_retention_action(probability, input_df.iloc[0].to_dict())
+        customer_value = calculate_customer_value(input_df.iloc[0].to_dict(), probability)
         st.session_state["latest_prediction"] = {"prediction": int(probability >= threshold), "probability": probability}
 
-        st.markdown("### 📊 Prediction Results")
+        st.markdown("### Prediction results")
 
         st.caption("Estimated cumulative probability that this active customer churns within each future horizon.")
         horizon_col1, horizon_col2, horizon_col3 = st.columns(3)
@@ -426,53 +490,42 @@ with single_tab:
         horizon_col2.metric("Next 60 days", f"{horizon_probabilities[60]:.1%}")
         horizon_col3.metric("Next 90 days", f"{horizon_probabilities[90]:.1%}")
 
-        col1, col2 = st.columns(2)
+        risk_class = "high" if probability >= 0.7 else "medium" if probability >= 0.4 else "low"
+        risk_label = "HIGH RISK" if risk_class == "high" else "MEDIUM RISK" if risk_class == "medium" else "LOW RISK"
+        col1, col2 = st.columns([1.25, 0.75])
         with col1:
             st.markdown(
                 f"""
-                <div class="metric-card">
-                    <div class="metric-label">90-day Churn Probability</div>
-                    <div class="metric-value">{horizon_probabilities[90]:.1%}</div>
+                <div class="assessment-card {risk_class}">
+                    <div class="assessment-label">{risk_label}</div>
+                    <div class="assessment-probability">{horizon_probabilities[90]:.1%}</div>
+                    <div class="assessment-caption">90-day probability of churn</div>
+                    <div class="assessment-revenue">Revenue at risk: <strong>${customer_value['revenue_at_risk']:,.0f}</strong></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
         with col2:
-            if probability >= threshold:
-                st.markdown(
-                    """
-                    <div class="status-risk">
-                        ⚠️ HIGH RISK<br>
-                        Customer is likely to churn
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            else:
-                st.markdown(
-                    """
-                    <div class="status-safe">
-                        ✅ LOW RISK<br>
-                        Customer is likely to stay
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                st.metric("Estimated time to churn", f"~{survival_metrics['median_time_to_churn_months']:.1f} months", help="Median time-to-churn from an exponential survival projection using the 90-day calibrated risk.")
+            st.metric("Estimated time to churn", f"~{survival_metrics['median_time_to_churn_months']:.1f} months", help="Median time-to-churn from an exponential survival projection using the 90-day calibrated risk.")
+            st.metric("Expected remaining life", f"{customer_value['expected_remaining_months']:.0f} months")
 
         st.markdown("### Risk Assessment")
         risk_level = "🔴 Very High" if probability > 0.8 else "🟠 High" if probability > 0.6 else "🟡 Medium" if probability > 0.4 else "🟢 Low"
         st.progress(float(probability), text=f"Risk Level: {risk_level}")
-        recommendation = recommend_retention_action(probability, input_df.iloc[0].to_dict())
-        st.info(f"**Recommended action:** {recommendation['recommended_action']}  \n_{recommendation['reason']}_")
-        customer_value = calculate_customer_value(input_df.iloc[0].to_dict(), probability)
-        value_col1, value_col2, value_col3 = st.columns(3)
-        value_col1.metric("Expected remaining life", f"{customer_value['expected_remaining_months']:.0f} months")
-        value_col2.metric("Potential revenue", f"${customer_value['potential_revenue']:,.0f}")
-        value_col3.metric("Revenue at risk", f"${customer_value['revenue_at_risk']:,.0f}")
+        st.markdown(
+            f"""
+            <div class="recommendation-card">
+                <div class="recommendation-title">🎯 Retention recommendation</div>
+                <div class="recommendation-action">{recommendation['recommended_action']}</div>
+                <div class="recommendation-reason">{recommendation['reason']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        value_col1, value_col2 = st.columns(2)
+        value_col1.metric("Potential revenue", f"${customer_value['potential_revenue']:,.0f}")
+        value_col2.metric("Revenue at risk", f"${customer_value['revenue_at_risk']:,.0f}")
 
         st.markdown("### What-if retention simulation")
         st.caption("Change a few controllable customer conditions to estimate how a retention offer could affect churn risk.")
