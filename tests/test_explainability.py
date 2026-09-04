@@ -1,6 +1,6 @@
 import pandas as pd
 
-from app.explainability import explain_prediction, shap_waterfall
+from app.explainability import explain_prediction, shap_waterfall, summarize_churn_drivers
 from model.train_pipeline import build_pipeline
 
 
@@ -44,3 +44,23 @@ def test_shap_waterfall_returns_figure():
     figure = shap_waterfall(model, sample)
 
     assert figure is not None
+
+
+def test_summarize_churn_drivers_returns_ranked_impacts():
+    model = build_pipeline()
+    sample = pd.DataFrame([{
+        "tenure": 5,
+        "MonthlyCharges": 80,
+        "TotalCharges": 350,
+        "Contract": "Month-to-month",
+        "PaymentMethod": "Electronic check",
+        "InternetService": "Fiber optic",
+        "TechSupport": "No",
+        "OnlineSecurity": "No",
+    }] * 3)
+
+    drivers = summarize_churn_drivers(model, sample)
+
+    assert not drivers.empty
+    assert {"label", "impact", "share_pct"}.issubset(drivers.columns)
+    assert drivers["impact"].is_monotonic_decreasing

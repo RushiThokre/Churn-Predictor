@@ -254,6 +254,68 @@ def explain_prediction(model, raw_df: pd.DataFrame, top_n: int = 5) -> pd.DataFr
     return positive.head(top_n)[["feature", "label", "contribution", "share_pct"]].copy()
 
 
+def _driver_label(feature_name: str) -> str:
+    cleaned = feature_name.replace("num__", "").replace("cat__", "")
+    if cleaned == "MonthlyCharges":
+        return "High monthly charges"
+    if cleaned == "TotalCharges":
+        return "High total charges"
+    if cleaned == "tenure":
+        return "Low tenure"
+    if cleaned.startswith("Contract_"):
+        return f"{cleaned.removeprefix('Contract_')} contract"
+    if cleaned.startswith("PaymentMethod_"):
+        return f"{cleaned.removeprefix('PaymentMethod_')} payment"
+    if cleaned.startswith("TechSupport_No"):
+        return "No tech support"
+    if cleaned.startswith("OnlineSecurity_No"):
+        return "No online security"
+    return _decode_encoded_feature(feature_name)
+
+
+def summarize_churn_drivers(model, raw_df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
+    """Aggregate mean absolute SHAP impact across a portfolio."""
+    if raw_df.empty or not hasattr(model, "named_steps"):
+        return pd.DataFrame(columns=["label", "impact", "share_pct"])
+
+    preprocessor = model.named_steps.get("preprocessor")
+    selector = model.named_steps.get("selector")
+    classifier = model.named_steps.get("classifier")
+    if preprocessor is None or classifier is None:
+        return pd.DataFrame(columns=["label", "impact", "share_pct"])
+
+    input_df = _prepare_input_features(raw_df)
+    transformed = preprocessor.transform(input_df)
+    if hasattr(transformed, "toarray"):
+        transformed = transformed.toarray()
+    feature_names = np.asarray(preprocessor.get_feature_names_out())
+    if selector is not None:
+        transformed = selector.transform(transformed)
+        feature_names = feature_names[selector.get_support()]
+
+    explainer = shap.TreeExplainer(classifier)
+    shap_values = explainer.shap_values(transformed)
+    if isinstance(shap_values, list):
+        shap_values = shap_values[1]
+    elif isinstance(shap_values, np.ndarray) and shap_values.ndim == 3:
+        shap_values = shap_values[:, :, 1]
+
+    values = np.asarray(shap_values)
+    if values.ndim != 2:
+        return pd.DataFrame(columns=["label", "impact", "share_pct"])
+
+    summary = pd.DataFrame({
+        "label": [_driver_label(name) for name in feature_names],
+        "impact": np.abs(values).mean(axis=0),
+    })
+    summary = summary.groupby("label", as_index=False)["impact"].sum()
+    total_impact = float(summary["impact"].sum())
+    if total_impact == 0:
+        return pd.DataFrame(columns=["label", "impact", "share_pct"])
+    summary["share_pct"] = summary["impact"] / total_impact * 100
+    return summary.sort_values("impact", ascending=False).head(top_n).reset_index(drop=True)
+
+
 def shap_waterfall(model, raw_df: pd.DataFrame, max_display: int = 8):
     """Return a matplotlib SHAP waterfall figure for the first input row."""
     explanation = _build_shap_explanation(model, raw_df)

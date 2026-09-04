@@ -17,6 +17,7 @@ from app.explainability import (  # noqa: E402
     FEATURE_COLUMNS,
     explain_prediction,
     predict_batch,
+    summarize_churn_drivers,
     shap_waterfall,
     summarize_batch_predictions,
 )
@@ -313,13 +314,32 @@ with portfolio_tab:
         secondary_2.metric("🟠 Medium Risk", f"{medium_risk:,}")
         secondary_3.metric("💳 Avg Monthly Revenue", f"${average_monthly_revenue:,.2f}")
 
-        chart_col, table_col = st.columns([2, 3])
-        with chart_col:
+        risk_col, drivers_col, table_col = st.columns([1.5, 1.5, 3])
+        with risk_col:
             st.markdown("### Churn risk distribution")
             distribution = filtered["risk_level"].value_counts().reindex(["High", "Medium", "Low"], fill_value=0).rename_axis("risk_level").reset_index(name="customers")
             risk_chart = px.bar(distribution, x="risk_level", y="customers", color="risk_level", color_discrete_map={"High": "#dc2626", "Medium": "#f59e0b", "Low": "#16a34a"})
             risk_chart.update_layout(showlegend=False, height=330, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(risk_chart, use_container_width=True)
+
+        with drivers_col:
+            st.markdown("### Top churn drivers")
+            driver_data = summarize_churn_drivers(model, filtered)
+            if driver_data.empty:
+                st.info("SHAP drivers are unavailable for this selection.")
+            else:
+                driver_chart = px.bar(
+                    driver_data.sort_values("share_pct"),
+                    x="share_pct",
+                    y="label",
+                    orientation="h",
+                    text="share_pct",
+                    color="share_pct",
+                    color_continuous_scale=[[0, "#93c5fd"], [1, "#1d4ed8"]],
+                )
+                driver_chart.update_traces(texttemplate="%{text:.0f}%", textposition="outside", cliponaxis=False)
+                driver_chart.update_layout(showlegend=False, coloraxis_showscale=False, height=330, margin=dict(l=5, r=25, t=10, b=10), xaxis_title="Share of SHAP impact", yaxis_title=None)
+                st.plotly_chart(driver_chart, use_container_width=True)
 
         with table_col:
             st.markdown("### Top risk customers")
