@@ -2,6 +2,7 @@
 __pycache__/
 .pytest_cache/
 mlruns/
+catboost_info/
 api/app.log
 api/request_log.jsonl
 api/feedback_log.jsonl

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.business_metrics import calculate_customer_value
 from app.database import init_db, persist_model_version, persist_prediction_request
+from app.horizon import estimate_horizon_probabilities
 from app.retention import recommend_retention_action
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -69,6 +70,7 @@ _db_ready = False
 def _prediction_details(probability: float, features: dict[str, Any]) -> dict[str, Any]:
     threshold = float(getattr(_model, "decision_threshold", 0.5))
     prediction = int(probability >= threshold)
+    horizon_probabilities = estimate_horizon_probabilities(probability)
     customer_value = calculate_customer_value(features, probability)
     recommendation = recommend_retention_action(probability, features)
     return {
@@ -77,6 +79,10 @@ def _prediction_details(probability: float, features: dict[str, Any]) -> dict[st
         "churn_label": "churn" if prediction else "stay",
         "probability": round(probability, 3),
         "churn_probability": round(probability, 3),
+        "churn_probability_30d": horizon_probabilities[30],
+        "churn_probability_60d": horizon_probabilities[60],
+        "churn_probability_90d": horizon_probabilities[90],
+        "prediction_horizon_days": 90,
         "risk_level": "HIGH" if probability >= 0.7 else "MEDIUM" if probability >= 0.4 else "LOW",
         "expected_remaining_months": customer_value["expected_remaining_months"],
         "potential_revenue": round(customer_value["potential_revenue"], 2),
@@ -247,6 +253,8 @@ def model_info() -> dict[str, Any]:
         "decision_threshold": float(getattr(_model, "decision_threshold", 0.5)),
         "features": list(named_steps.get("preprocessor").feature_names_in_) if named_steps.get("preprocessor") is not None and hasattr(named_steps.get("preprocessor"), "feature_names_in_") else [],
         "artifact_updated_at": datetime.fromtimestamp(MODEL_PATH.stat().st_mtime, tz=timezone.utc).isoformat() if MODEL_PATH.exists() else None,
+        "prediction_horizons_days": [30, 60, 90],
+        "horizon_method": "90-day calibrated baseline with constant-hazard conversion",
     }
 
 

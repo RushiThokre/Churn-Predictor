@@ -12,14 +12,15 @@ from sklearn.feature_selection import SelectPercentile, f_classif
 from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
 
 from app.data_validation import remove_target_leakage, validate_telco_data
+from app.modeling import CalibratedPipeline
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "telco.csv"
 MODEL_PATH = ROOT / "model" / "churn_model.pkl"
+PREDICTION_HORIZONS_DAYS = (30, 60, 90)
 COLUMN_RENAME_MAP = {
     "Tenure in Months": "tenure",
     "Monthly Charge": "MonthlyCharges",
@@ -102,30 +103,6 @@ def _training_data() -> tuple[pd.DataFrame, pd.Series]:
     frame["tenure_bucket"] = pd.cut(frame["tenure"], bins=[0, 12, 24, 48, 72], labels=["0-1yr", "1-2yr", "2-4yr", "4-6yr"])
     features = ["tenure", "MonthlyCharges", "TotalCharges", "Contract", "PaymentMethod", "InternetService", "TechSupport", "OnlineSecurity", "tenure_bucket"]
     return frame[features], frame["Churn"]
-
-
-class CalibratedPipeline:
-    """Expose calibrated probabilities while retaining the base pipeline for SHAP."""
-
-    def __init__(self, base_pipeline: Pipeline, X: pd.DataFrame, y: pd.Series) -> None:
-        self.base_pipeline = base_pipeline
-        self.calibrated = CalibratedClassifierCV(estimator=base_pipeline, method="sigmoid", cv=3)
-        self.calibrated.fit(X, y)
-        self.decision_threshold = 0.5
-
-    @property
-    def named_steps(self):
-        return self.base_pipeline.named_steps
-
-    @property
-    def feature_names_in_(self):
-        return self.base_pipeline.feature_names_in_
-
-    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        return self.calibrated.predict_proba(X)
-
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        return (self.predict_proba(X)[:, 1] >= self.decision_threshold).astype(int)
 
 
 def _candidate_pipelines(y_train: pd.Series, xgb_params: dict[str, object] | None = None) -> dict[str, Pipeline]:
@@ -219,7 +196,7 @@ def train_champion() -> tuple[CalibratedPipeline, pd.DataFrame, float]:
     results = pd.DataFrame(rows)
     results["score"] = results["roc_auc"] + results["f1"] - results["business_cost"] / max(len(y), 1)
     champion_name = str(results.sort_values("score", ascending=False).iloc[0]["model"])
-    champion = CalibratedPipeline(trained[champion_name], X, y)
+    champion = CalibratedPipeline(trained[champion_name], X, y, PREDICTION_HORIZONS_DAYS)
     champion.decision_threshold = float(results.loc[results["model"] == champion_name, "threshold"].iloc[0])
     return champion, results.sort_values("score", ascending=False).reset_index(drop=True), champion.decision_threshold
 

@@ -21,6 +21,7 @@ from app.explainability import (  # noqa: E402
     summarize_batch_predictions,
 )
 from app.business_metrics import calculate_customer_value  # noqa: E402
+from app.horizon import estimate_horizon_probabilities  # noqa: E402
 from app.monitoring import (  # noqa: E402
     build_feature_drift_report,
     build_monitoring_summary,
@@ -311,19 +312,26 @@ with single_tab:
         )
 
         probability = float(model.predict_proba(input_df)[0][1])
+        horizon_probabilities = estimate_horizon_probabilities(probability)
         explanation = explain_prediction(model, input_df).head(5)
         threshold = float(getattr(model, "decision_threshold", 0.5))
         st.session_state["latest_prediction"] = {"prediction": int(probability >= threshold), "probability": probability}
 
         st.markdown("### 📊 Prediction Results")
 
+        st.caption("Estimated cumulative probability that this active customer churns within each future horizon.")
+        horizon_col1, horizon_col2, horizon_col3 = st.columns(3)
+        horizon_col1.metric("Next 30 days", f"{horizon_probabilities[30]:.1%}")
+        horizon_col2.metric("Next 60 days", f"{horizon_probabilities[60]:.1%}")
+        horizon_col3.metric("Next 90 days", f"{horizon_probabilities[90]:.1%}")
+
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(
                 f"""
                 <div class="metric-card">
-                    <div class="metric-label">Churn Probability</div>
-                    <div class="metric-value">{probability:.1%}</div>
+                    <div class="metric-label">90-day Churn Probability</div>
+                    <div class="metric-value">{horizon_probabilities[90]:.1%}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -503,8 +511,9 @@ with batch_tab:
                 st.plotly_chart(segment_chart, use_container_width=True)
 
             st.markdown("### Batch predictions")
-            display_df = predictions[["customer_id", "Contract", "InternetService", "TechSupport", "OnlineSecurity", "churn_probability", "churn_label", "potential_revenue", "revenue_at_risk", "recommended_action"]].copy()
-            display_df["churn_probability"] = display_df["churn_probability"].round(3)
+            display_df = predictions[["customer_id", "Contract", "InternetService", "TechSupport", "OnlineSecurity", "churn_probability_30d", "churn_probability_60d", "churn_probability_90d", "churn_label", "potential_revenue", "revenue_at_risk", "recommended_action"]].copy()
+            for column in ["churn_probability_30d", "churn_probability_60d", "churn_probability_90d"]:
+                display_df[column] = display_df[column].map(lambda value: f"{value:.1%}")
             st.dataframe(display_df.sort_values("churn_probability", ascending=False), use_container_width=True, hide_index=True)
         except Exception as exc:
             st.error(f"Unable to process the upload: {exc}")

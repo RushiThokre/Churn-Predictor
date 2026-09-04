@@ -16,6 +16,13 @@ AI-powered customer churn intelligence for the Telco customer dataset.
 - Pandera data validation for types, missing values, ranges, categories, duplicate IDs, and target leakage.
 - Local MLflow experiment tracking and Docker support.
 
+Predictions are expressed as cumulative churn risk over the next 30, 60, and 90
+days for an active customer. The supplied historical dataset has a churn outcome
+but no observation or churn dates, so the calibrated model score is treated as a
+90-day baseline and converted to shorter horizons with a constant-hazard
+assumption. A production model should replace this estimate with time-stamped
+survival or horizon-specific labels.
+
 ## Architecture
 
 ```text
@@ -30,7 +37,7 @@ Telco CSV -> preprocessing -> model comparison -> champion artifact
 
 ```bash
 pip install -r requirements.txt
-python model/train_pipeline.py
+python -m model.train_pipeline
 uvicorn api.main:app --reload
 streamlit run app/streamlit_app.py
 ```
@@ -53,7 +60,7 @@ POST /api/v1/predict
 POST /api/v1/batch-predict
 ```
 
-Prediction routes accept either `X-API-Key` or an `Authorization: Bearer <JWT>` header and are rate limited per client. Responses retain the original `prediction`, `churn_label`, and `probability` fields and also include `risk_level`, `revenue_at_risk`, and `recommended_action`.
+Prediction routes accept either `X-API-Key` or an `Authorization: Bearer <JWT>` header and are rate limited per client. Responses retain the original `prediction`, `churn_label`, and `probability` fields and also include `churn_probability_30d`, `churn_probability_60d`, `churn_probability_90d`, `risk_level`, `revenue_at_risk`, and `recommended_action`. The legacy `probability` field is the 90-day baseline.
 
 ## Training Output
 
