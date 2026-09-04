@@ -21,7 +21,7 @@ from app.explainability import (  # noqa: E402
     summarize_batch_predictions,
 )
 from app.business_metrics import calculate_customer_value  # noqa: E402
-from app.horizon import estimate_horizon_probabilities  # noqa: E402
+from app.horizon import estimate_horizon_probabilities, estimate_survival_metrics  # noqa: E402
 from app.monitoring import (  # noqa: E402
     build_feature_drift_report,
     build_monitoring_summary,
@@ -313,6 +313,7 @@ with single_tab:
 
         probability = float(model.predict_proba(input_df)[0][1])
         horizon_probabilities = estimate_horizon_probabilities(probability)
+        survival_metrics = estimate_survival_metrics(probability)
         explanation = explain_prediction(model, input_df).head(5)
         threshold = float(getattr(model, "decision_threshold", 0.5))
         st.session_state["latest_prediction"] = {"prediction": int(probability >= threshold), "probability": probability}
@@ -348,6 +349,7 @@ with single_tab:
                     """,
                     unsafe_allow_html=True,
                 )
+
             else:
                 st.markdown(
                     """
@@ -358,6 +360,8 @@ with single_tab:
                     """,
                     unsafe_allow_html=True,
                 )
+
+                st.metric("Estimated time to churn", f"~{survival_metrics['median_time_to_churn_months']:.1f} months", help="Median time-to-churn from an exponential survival projection using the 90-day calibrated risk.")
 
         st.markdown("### Risk Assessment")
         risk_level = "🔴 Very High" if probability > 0.8 else "🟠 High" if probability > 0.6 else "🟡 Medium" if probability > 0.4 else "🟢 Low"
@@ -511,7 +515,7 @@ with batch_tab:
                 st.plotly_chart(segment_chart, use_container_width=True)
 
             st.markdown("### Batch predictions")
-            display_df = predictions[["customer_id", "Contract", "InternetService", "TechSupport", "OnlineSecurity", "churn_probability_30d", "churn_probability_60d", "churn_probability_90d", "churn_label", "potential_revenue", "revenue_at_risk", "recommended_action"]].copy()
+            display_df = predictions[["customer_id", "Contract", "InternetService", "TechSupport", "OnlineSecurity", "churn_probability_30d", "churn_probability_60d", "churn_probability_90d", "estimated_time_to_churn_months", "churn_label", "potential_revenue", "revenue_at_risk", "recommended_action"]].copy()
             for column in ["churn_probability_30d", "churn_probability_60d", "churn_probability_90d"]:
                 display_df[column] = display_df[column].map(lambda value: f"{value:.1%}")
             st.dataframe(display_df.sort_values("churn_probability", ascending=False), use_container_width=True, hide_index=True)

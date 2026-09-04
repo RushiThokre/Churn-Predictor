@@ -15,6 +15,7 @@ AI-powered customer churn intelligence for the Telco customer dataset.
 - Observed-input monitoring with PSI, Kolmogorov-Smirnov, and Jensen-Shannon drift metrics plus retraining guidance.
 - Pandera data validation for types, missing values, ranges, categories, duplicate IDs, and target leakage.
 - Local MLflow experiment tracking and Docker support.
+- Exponential survival projection with hazard rate and median time-to-churn estimates.
 
 Predictions are expressed as cumulative churn risk over the next 30, 60, and 90
 days for an active customer. The supplied historical dataset has a churn outcome
@@ -22,6 +23,12 @@ but no observation or churn dates, so the calibrated model score is treated as a
 90-day baseline and converted to shorter horizons with a constant-hazard
 assumption. A production model should replace this estimate with time-stamped
 survival or horizon-specific labels.
+
+The dashboard and prediction API also expose an estimated median time to churn
+and monthly hazard rate. This is an exponential survival projection from the
+calibrated 90-day risk, not a fitted Cox model, because the supplied dataset has
+no event or censoring timestamps. Replace it with Cox or Random Survival Forest
+training once those time-to-event fields are available.
 
 ## Architecture
 
@@ -60,7 +67,7 @@ POST /api/v1/predict
 POST /api/v1/batch-predict
 ```
 
-Prediction routes accept either `X-API-Key` or an `Authorization: Bearer <JWT>` header and are rate limited per client. Responses retain the original `prediction`, `churn_label`, and `probability` fields and also include `churn_probability_30d`, `churn_probability_60d`, `churn_probability_90d`, `risk_level`, `revenue_at_risk`, and `recommended_action`. The legacy `probability` field is the 90-day baseline.
+Prediction routes accept either `X-API-Key` or an `Authorization: Bearer <JWT>` header and are rate limited per client. Responses retain the original `prediction`, `churn_label`, and `probability` fields and also include `churn_probability_30d`, `churn_probability_60d`, `churn_probability_90d`, `estimated_time_to_churn_months`, `hazard_per_month`, `risk_level`, `revenue_at_risk`, and `recommended_action`. The legacy `probability` field is the 90-day baseline.
 
 ## Training Output
 

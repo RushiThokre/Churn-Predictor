@@ -5,7 +5,7 @@ import pandas as pd
 import shap
 import matplotlib.pyplot as plt
 
-from app.horizon import estimate_horizon_probabilities
+from app.horizon import estimate_horizon_probabilities, estimate_survival_metrics
 
 FEATURE_COLUMNS = [
     "tenure",
@@ -116,6 +116,10 @@ def predict_batch(model, raw_df: pd.DataFrame) -> pd.DataFrame:
     predictions["churn_probability_30d"] = [values[30] for values in horizon_values]
     predictions["churn_probability_60d"] = [values[60] for values in horizon_values]
     predictions["churn_probability_90d"] = [values[90] for values in horizon_values]
+    predictions["estimated_time_to_churn_months"] = [
+        estimate_survival_metrics(float(probability))["median_time_to_churn_months"]
+        for probability in probabilities
+    ]
     threshold = float(getattr(model, "decision_threshold", 0.5))
     predictions["churn_label"] = predictions["churn_probability"].apply(lambda prob: "churn" if prob >= threshold else "stay")
     return predictions

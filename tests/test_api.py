@@ -68,7 +68,7 @@ def test_predict_batch_returns_all_predictions():
     payload = response.json()
     assert len(payload) == 2
     assert payload[0]["customer_id"] == "CUST-1"
-    assert {"churn_probability", "churn_probability_30d", "churn_probability_60d", "churn_probability_90d", "risk_level", "revenue_at_risk", "recommended_action"}.issubset(payload[0])
+    assert {"churn_probability", "churn_probability_30d", "churn_probability_60d", "churn_probability_90d", "estimated_time_to_churn_months", "risk_level", "revenue_at_risk", "recommended_action"}.issubset(payload[0])
     assert payload[0]["churn_probability_30d"] < payload[0]["churn_probability_60d"] < payload[0]["churn_probability_90d"]
     assert payload[0]["churn_label"] in {"churn", "stay"}
     assert payload[0]["probability"] >= 0

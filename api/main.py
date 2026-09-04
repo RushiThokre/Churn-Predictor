@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.business_metrics import calculate_customer_value
 from app.database import init_db, persist_model_version, persist_prediction_request
-from app.horizon import estimate_horizon_probabilities
+from app.horizon import estimate_horizon_probabilities, estimate_survival_metrics
 from app.retention import recommend_retention_action
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -71,6 +71,7 @@ def _prediction_details(probability: float, features: dict[str, Any]) -> dict[st
     threshold = float(getattr(_model, "decision_threshold", 0.5))
     prediction = int(probability >= threshold)
     horizon_probabilities = estimate_horizon_probabilities(probability)
+    survival_metrics = estimate_survival_metrics(probability)
     customer_value = calculate_customer_value(features, probability)
     recommendation = recommend_retention_action(probability, features)
     return {
@@ -83,6 +84,9 @@ def _prediction_details(probability: float, features: dict[str, Any]) -> dict[st
         "churn_probability_60d": horizon_probabilities[60],
         "churn_probability_90d": horizon_probabilities[90],
         "prediction_horizon_days": 90,
+        "estimated_time_to_churn_months": survival_metrics["median_time_to_churn_months"],
+        "hazard_per_month": survival_metrics["hazard_per_month"],
+        "survival_method": "Exponential survival projection from calibrated 90-day risk",
         "risk_level": "HIGH" if probability >= 0.7 else "MEDIUM" if probability >= 0.4 else "LOW",
         "expected_remaining_months": customer_value["expected_remaining_months"],
         "potential_revenue": round(customer_value["potential_revenue"], 2),
