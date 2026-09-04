@@ -87,6 +87,28 @@ st.markdown(
         text-align: center;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid #dbe4ee;
+        border-radius: 14px;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+        min-height: 108px;
+        padding: 1rem 1.1rem 0.85rem;
+    }
+    [data-testid="stMetricLabel"] {
+        color: #64748b;
+        font-size: 0.76rem;
+        font-weight: 750;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    [data-testid="stMetricValue"] {
+        color: #172554;
+        font-size: 1.8rem;
+        font-weight: 750;
+        line-height: 1.2;
+        margin-top: 0.45rem;
+    }
     .metric-value {
         font-size: 2.5rem;
         font-weight: 700;
@@ -264,10 +286,10 @@ with portfolio_tab:
         revenue_at_risk = float(filtered["revenue_at_risk"].sum())
         average_probability = float(filtered["churn_probability"].mean()) if not filtered.empty else 0.0
         metric_1, metric_2, metric_3, metric_4 = st.columns(4)
-        metric_1.metric("Customers", f"{len(filtered):,}")
-        metric_2.metric("High risk", f"{high_risk:,}")
-        metric_3.metric("Revenue at risk", f"${revenue_at_risk:,.0f}")
-        metric_4.metric("Average churn probability", f"{average_probability:.1%}")
+        metric_1.metric("👥 Customers", f"{len(filtered):,}")
+        metric_2.metric("🔴 High Risk", f"{high_risk:,}")
+        metric_3.metric("💰 Revenue at Risk", f"${revenue_at_risk / 1_000_000:.2f}M")
+        metric_4.metric("📉 Avg Churn Probability", f"{average_probability:.1%}")
 
         chart_col, table_col = st.columns([0.9, 1.6])
         with chart_col:
