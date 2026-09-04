@@ -89,7 +89,7 @@ st.markdown(
         text-transform: uppercase;
     }
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #6366F1;
         color: white;
         padding: 2rem;
         border-radius: 15px;
@@ -131,7 +131,7 @@ st.markdown(
         height: 0.75rem;
     }
     .status-safe {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        background: #22C55E;
         color: white;
         padding: 1.5rem;
         border-radius: 15px;
@@ -141,7 +141,7 @@ st.markdown(
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
     .status-risk {
-        background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        background: #EF4444;
         color: white;
         padding: 1.5rem;
         border-radius: 15px;
@@ -155,7 +155,7 @@ st.markdown(
         padding: 2rem;
         border-radius: 15px;
         margin-bottom: 2rem;
-        border-left: 5px solid #667eea;
+        border-left: 5px solid #6366F1;
     }
     </style>
     """,
@@ -318,7 +318,7 @@ with portfolio_tab:
         with risk_col:
             st.markdown("### Churn risk distribution")
             distribution = filtered["risk_level"].value_counts().reindex(["High", "Medium", "Low"], fill_value=0).rename_axis("risk_level").reset_index(name="customers")
-            risk_chart = px.bar(distribution, x="risk_level", y="customers", color="risk_level", color_discrete_map={"High": "#dc2626", "Medium": "#f59e0b", "Low": "#16a34a"})
+            risk_chart = px.bar(distribution, x="risk_level", y="customers", color="risk_level", color_discrete_map={"High": "#EF4444", "Medium": "#F59E0B", "Low": "#22C55E"})
             risk_chart.update_layout(showlegend=False, height=330, margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(risk_chart, use_container_width=True)
 
@@ -335,7 +335,7 @@ with portfolio_tab:
                     orientation="h",
                     text="share_pct",
                     color="share_pct",
-                    color_continuous_scale=[[0, "#93c5fd"], [1, "#1d4ed8"]],
+                    color_continuous_scale=[[0, "#A5B4FC"], [1, "#6366F1"]],
                 )
                 driver_chart.update_traces(texttemplate="%{text:.0f}%", textposition="outside", cliponaxis=False)
                 driver_chart.update_layout(showlegend=False, coloraxis_showscale=False, height=330, margin=dict(l=5, r=25, t=10, b=10), xaxis_title="Share of SHAP impact", yaxis_title=None)
@@ -588,7 +588,7 @@ with batch_tab:
                 x="Contract",
                 y="churn_rate_pct",
                 color="churn_rate_pct",
-                color_continuous_scale="Reds",
+                color_continuous_scale=[[0, "#FECACA"], [1, "#EF4444"]],
                 title="Predicted churn rate by contract",
             )
             contract_chart.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=10))
@@ -608,7 +608,7 @@ with batch_tab:
                     x="segment",
                     y="avg_probability_pct",
                     color="avg_probability_pct",
-                    color_continuous_scale="Blues",
+                    color_continuous_scale=[[0, "#C7D2FE"], [1, "#6366F1"]],
                     title="Average churn probability by segment",
                 )
                 segment_chart.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=10))
@@ -673,7 +673,7 @@ with monitoring_tab:
     with metric_col3:
         with st.container(border=True):
             st.markdown(
-                '<div style="border-left: 4px solid #14b8a6; background: rgba(20, 184, 166, 0.07); border-radius: 0.75rem; padding: 0.25rem 0.75rem 0.5rem 0.75rem; margin: -0.25rem 0;">',
+                '<div style="border-left: 4px solid #6366F1; background: rgba(99, 102, 241, 0.07); border-radius: 0.75rem; padding: 0.25rem 0.75rem 0.5rem 0.75rem; margin: -0.25rem 0;">',
                 unsafe_allow_html=True,
             )
             feedback_delta = None
