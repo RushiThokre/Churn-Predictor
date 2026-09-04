@@ -26,7 +26,7 @@ jobs:
       - name: Run training smoke check
         env:
           MLFLOW_ALLOW_FILE_STORE: "true"
-        run: python model/train_pipeline.py
+        run: python -m model.train_pipeline
 
       - name: Verify model artifact
         run: test -s model/churn_model.pkl
