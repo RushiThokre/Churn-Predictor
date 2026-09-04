@@ -79,6 +79,14 @@ st.markdown(
         font-size: 0.76rem;
         font-weight: 500;
     }
+    .sidebar-heading {
+        color: #172554;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        margin: 0.25rem 0 0.8rem;
+        text-transform: uppercase;
+    }
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -260,16 +268,18 @@ with portfolio_tab:
     try:
         portfolio = load_portfolio_predictions(model)
         with st.sidebar:
-            st.markdown("### Portfolio filters")
-            contract_filter = st.multiselect("Contract type", sorted(portfolio["Contract"].dropna().unique()), placeholder="All contracts")
-            tenure_filter = st.slider("Tenure (months)", 0, 72, (0, 72))
-            internet_filter = st.multiselect("Internet service", sorted(portfolio["InternetService"].dropna().unique()), placeholder="All services")
-            payment_filter = st.multiselect("Payment method", sorted(portfolio["PaymentMethod"].dropna().unique()), placeholder="All methods")
-            senior_filter = st.selectbox("Senior citizen", ["All", "Yes", "No"])
+            st.markdown('<div class="sidebar-heading">Filters</div>', unsafe_allow_html=True)
+            contract_filter = st.multiselect("Contract", sorted(portfolio["Contract"].dropna().unique()), placeholder="All contracts")
+            internet_filter = st.multiselect("Internet", sorted(portfolio["InternetService"].dropna().unique()), placeholder="All services")
+            payment_filter = st.multiselect("Payment", sorted(portfolio["PaymentMethod"].dropna().unique()), placeholder="All methods")
+            risk_filter = st.multiselect("Risk", ["High", "Medium", "Low"], default=["High", "Medium", "Low"], placeholder="All risk levels")
+
             charge_min = float(portfolio["MonthlyCharges"].min())
             charge_max = float(portfolio["MonthlyCharges"].max())
-            charge_filter = st.slider("Monthly charges", charge_min, charge_max, (charge_min, charge_max))
-            risk_filter = st.multiselect("Risk level", ["High", "Medium", "Low"], default=["High", "Medium", "Low"])
+            with st.expander("Advanced filters", expanded=False):
+                tenure_filter = st.slider("Tenure", 0, 72, (0, 72), format="%d months")
+                charge_filter = st.slider("Monthly charges", charge_min, charge_max, (charge_min, charge_max), format="$%.2f")
+                senior_filter = st.selectbox("Senior citizen", ["All", "Yes", "No"])
 
         filtered = portfolio[
             portfolio["tenure"].between(*tenure_filter)
