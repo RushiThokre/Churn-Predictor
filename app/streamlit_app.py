@@ -47,7 +47,7 @@ st.markdown(
     """
     <style>
     .block-container {
-        padding-top: 1.5rem;
+        padding-top: 2rem;
         padding-bottom: 2rem;
     }
     [data-testid="stSidebar"] {
@@ -55,13 +55,14 @@ st.markdown(
         max-width: 240px;
     }
     .brand {
-        padding: 0.25rem 0 1.25rem;
+        overflow: visible;
+        padding: 0.5rem 0 1.25rem;
     }
     .brand-title {
         color: #F8FAFC;
         font-size: 2rem;
         font-weight: 750;
-        line-height: 1.1;
+        line-height: 1.25;
         letter-spacing: 0.01em;
     }
     .brand-subtitle {
@@ -316,16 +317,21 @@ def normalize_customer_input(row: dict) -> dict:
 col1, col2 = st.columns([4, 1])
 
 with col1:
-    st.markdown(
-        """
-        <div class="brand">
-            <div class="brand-title">🛡️ ChurnShield</div>
-            <div class="brand-subtitle">Customer Churn Intelligence Platform</div>
-            <div class="brand-tagline">Predict • Explain • Retain</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    brand_icon, brand_copy = st.columns([0.12, 1])
+    with brand_icon:
+        logo_path = Path(__file__).parent / "assets" / "churn_shield_logo.png"
+        st.image(str(logo_path), width=42)
+    with brand_copy:
+        st.markdown(
+            """
+            <div class="brand">
+                <div class="brand-title">ChurnShield</div>
+                <div class="brand-subtitle">Customer Churn Intelligence Platform</div>
+                <div class="brand-tagline">Predict • Explain • Retain</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 with col2:
     st.markdown(
