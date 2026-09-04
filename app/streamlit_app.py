@@ -46,7 +46,8 @@ st.markdown(
     """
     <style>
     .block-container {
-        padding-top: 2rem;
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
     }
     .brand {
         padding: 0.25rem 0 1.25rem;
