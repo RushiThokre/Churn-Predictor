@@ -260,7 +260,7 @@ with col2:
         unsafe_allow_html=True,
     )
 
-portfolio_tab, single_tab, batch_tab, monitoring_tab = st.tabs(["Portfolio Overview", "Single Prediction", "Batch Upload & Analytics", "Model Monitoring"])
+portfolio_tab, single_tab, batch_tab, explainability_tab, monitoring_tab = st.tabs(["📊 Overview", "👤 Customer Risk", "📁 Batch Analysis", "🧠 Explainability", "📈 Model Monitoring"])
 
 with portfolio_tab:
     st.markdown("### Customer risk dashboard")
@@ -566,6 +566,31 @@ with single_tab:
             on_click=write_feedback,
             kwargs={"prediction": st.session_state["latest_prediction"]["prediction"], "probability": probability, "correct": False},
         )
+
+with explainability_tab:
+    st.markdown("### 🧠 Model explainability")
+    st.caption("Aggregate SHAP impact shows which customer conditions contribute most to predicted churn across the portfolio.")
+    try:
+        explainability_portfolio = load_portfolio_predictions(model)
+        driver_data = summarize_churn_drivers(model, explainability_portfolio, top_n=8)
+        if driver_data.empty:
+            st.info("SHAP drivers are unavailable for the current portfolio.")
+        else:
+            explainability_chart = px.bar(
+                driver_data.sort_values("share_pct"),
+                x="share_pct",
+                y="label",
+                orientation="h",
+                text="share_pct",
+                color="share_pct",
+                color_continuous_scale=[[0, "#A5B4FC"], [1, "#6366F1"]],
+            )
+            explainability_chart.update_traces(texttemplate="%{text:.0f}%", textposition="outside", cliponaxis=False)
+            explainability_chart.update_layout(showlegend=False, coloraxis_showscale=False, height=430, margin=dict(l=10, r=35, t=15, b=10), xaxis_title="Share of mean absolute SHAP impact", yaxis_title=None)
+            st.plotly_chart(explainability_chart, use_container_width=True)
+            st.caption("Higher percentages indicate features with greater average influence on the model's churn score. SHAP explains model behavior; it does not establish causation.")
+    except Exception as exc:
+        st.error(f"Unable to build the explainability view: {exc}")
 
 with batch_tab:
     st.markdown("### 📦 Bulk customer upload")
