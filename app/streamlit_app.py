@@ -324,11 +324,19 @@ with portfolio_tab:
         with table_col:
             st.markdown("### Top risk customers")
             top_risk = filtered.sort_values(["churn_probability", "revenue_at_risk"], ascending=False).head(10)
-            top_risk = top_risk[["customer_id", "risk_level", "churn_probability", "MonthlyCharges", "revenue_at_risk", "Contract", "recommended_action"]].rename(columns={"customer_id": "Customer", "risk_level": "Risk", "churn_probability": "Churn probability", "MonthlyCharges": "Monthly revenue", "revenue_at_risk": "Revenue at risk", "recommended_action": "Recommended action"})
-            top_risk["Churn probability"] = top_risk["Churn probability"].map(lambda value: f"{value:.1%}")
-            top_risk["Monthly revenue"] = top_risk["Monthly revenue"].map(lambda value: f"${value:,.0f}")
-            top_risk["Revenue at risk"] = top_risk["Revenue at risk"].map(lambda value: f"${value:,.0f}")
+            top_risk = top_risk[["customer_id", "risk_level", "churn_probability", "revenue_at_risk", "Contract", "recommended_action"]].rename(columns={"customer_id": "Customer", "risk_level": "Risk", "churn_probability": "Churn %", "revenue_at_risk": "Revenue at Risk", "recommended_action": "Action"})
+            top_risk["Risk"] = top_risk["Risk"].map({"High": "🔴 HIGH", "Medium": "🟠 MEDIUM", "Low": "🟢 LOW"})
+            top_risk["Churn %"] = top_risk["Churn %"].map(lambda value: f"{value:.1%}")
+            top_risk["Revenue at Risk"] = top_risk["Revenue at Risk"].map(lambda value: f"${value:,.0f}")
             st.dataframe(top_risk, use_container_width=True, hide_index=True)
+
+            with st.expander("View all customers →", expanded=False):
+                all_customers = filtered.sort_values(["churn_probability", "revenue_at_risk"], ascending=False)
+                all_customers = all_customers[["customer_id", "risk_level", "churn_probability", "revenue_at_risk", "Contract", "recommended_action"]].rename(columns={"customer_id": "Customer", "risk_level": "Risk", "churn_probability": "Churn %", "revenue_at_risk": "Revenue at Risk", "recommended_action": "Action"})
+                all_customers["Risk"] = all_customers["Risk"].map({"High": "🔴 HIGH", "Medium": "🟠 MEDIUM", "Low": "🟢 LOW"})
+                all_customers["Churn %"] = all_customers["Churn %"].map(lambda value: f"{value:.1%}")
+                all_customers["Revenue at Risk"] = all_customers["Revenue at Risk"].map(lambda value: f"${value:,.0f}")
+                st.dataframe(all_customers, use_container_width=True, hide_index=True)
     except Exception as exc:
         st.error(f"Unable to score the portfolio: {exc}")
 
