@@ -313,7 +313,7 @@ with portfolio_tab:
         secondary_2.metric("🟠 Medium Risk", f"{medium_risk:,}")
         secondary_3.metric("💳 Avg Monthly Revenue", f"${average_monthly_revenue:,.2f}")
 
-        chart_col, table_col = st.columns([0.9, 1.6])
+        chart_col, table_col = st.columns([2, 3])
         with chart_col:
             st.markdown("### Churn risk distribution")
             distribution = filtered["risk_level"].value_counts().reindex(["High", "Medium", "Low"], fill_value=0).rename_axis("risk_level").reset_index(name="customers")
