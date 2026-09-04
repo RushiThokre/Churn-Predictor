@@ -50,6 +50,10 @@ st.markdown(
         padding-top: 1.5rem;
         padding-bottom: 2rem;
     }
+    [data-testid="stSidebar"] {
+        min-width: 240px;
+        max-width: 240px;
+    }
     .brand {
         padding: 0.25rem 0 1.25rem;
     }
@@ -431,6 +435,20 @@ with portfolio_tab:
                 all_customers["Churn %"] = all_customers["Churn %"].map(lambda value: f"{value:.1%}")
                 all_customers["Revenue at Risk"] = all_customers["Revenue at Risk"].map(lambda value: f"${value:,.0f}")
                 st.dataframe(all_customers, use_container_width=True, hide_index=True)
+
+        st.markdown("### Revenue at risk by contract")
+        revenue_by_contract = filtered.groupby("Contract", as_index=False)["revenue_at_risk"].sum().sort_values("revenue_at_risk", ascending=False)
+        revenue_chart = px.bar(
+            revenue_by_contract,
+            x="Contract",
+            y="revenue_at_risk",
+            text="revenue_at_risk",
+            color="revenue_at_risk",
+            color_continuous_scale=[[0, "#FECACA"], [1, "#EF4444"]],
+        )
+        revenue_chart.update_traces(texttemplate="$%{text:,.0f}", textposition="outside")
+        revenue_chart.update_layout(showlegend=False, coloraxis_showscale=False, height=300, margin=dict(l=10, r=10, t=15, b=10), yaxis_title="Revenue at risk", xaxis_title=None)
+        st.plotly_chart(revenue_chart, use_container_width=True)
     except Exception as exc:
         st.error(f"Unable to score the portfolio: {exc}")
 
